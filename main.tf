@@ -4,9 +4,20 @@ module "nginx_ingress" {
   cluster_name       = var.cluster_name
 }
 
-module "istio" {
-  source             = "./modules/istio"
+module "prometheus" {
+  source             = "./modules/prometheus"
   kubeconfig_path    = var.kubeconfig_path
   cluster_name       = var.cluster_name
-  istio_password     = var.istio_password
+}
+
+module "grafana" {
+  source             = "./modules/grafana"
+  kubeconfig_path    = var.kubeconfig_path
+  cluster_name       = var.cluster_name
+}
+
+module "loki" {
+  source             = "./modules/loki"
+  kubeconfig_path    = var.kubeconfig_path
+  cluster_name       = var.cluster_name
 }

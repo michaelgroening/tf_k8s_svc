@@ -5,7 +5,3 @@ variable "kubeconfig_path" {
 variable "cluster_name" {
   type = string
 }
-
-variable "istio_password" {
-  type = string
-}

@@ -488,6 +488,9 @@ resource "kubernetes_manifest" "configmap_ingress_nginx_ingress_nginx_controller
     "apiVersion" = "v1"
     "data" = {
       "allow-snippet-annotations" = "true"
+      "use-forwarded-headers" = "true"
+      "compute-full-forwarded-for" = "true"
+      "use-proxy-protocol" = "true"
     }
     "kind" = "ConfigMap"
     "metadata" = {
@@ -519,22 +522,21 @@ resource "kubernetes_manifest" "service_ingress_nginx_ingress_nginx_controller" 
       }
       "name"      = "ingress-nginx-controller"
       "namespace" = "ingress-nginx"
+      "annotations" = {
+        "load-balancer.hetzner.cloud/name" = "kubelb"
+        "load-balancer.hetzner.cloud/health-check-protocol": "http"
+        "load-balancer.hetzner.cloud/health-check-http-path": "/healthz"
+        "load-balancer.hetzner.cloud/uses-proxyprotocol": "true"
+        "load-balancer.hetzner.cloud/protocol": "tcp"
+      }
     }
     "spec" = {
       "ports" = [
         {
-          "appProtocol" = "http"
           "name"        = "http"
           "port"        = 80
           "protocol"    = "TCP"
           "targetPort"  = "http"
-        },
-        {
-          "appProtocol" = "https"
-          "name"        = "https"
-          "port"        = 443
-          "protocol"    = "TCP"
-          "targetPort"  = "https"
         },
       ]
       "selector" = {
@@ -542,7 +544,8 @@ resource "kubernetes_manifest" "service_ingress_nginx_ingress_nginx_controller" 
         "app.kubernetes.io/instance"  = "ingress-nginx"
         "app.kubernetes.io/name"      = "ingress-nginx"
       }
-      "type" = "NodePort"
+      "type" = "LoadBalancer"
+      "externalTrafficPolicy" = "Cluster"
     }
   }
 }
@@ -595,6 +598,7 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
         "app.kubernetes.io/part-of"   = "ingress-nginx"
         "app.kubernetes.io/version"   = "1.2.0"
       }
+
       "name"      = "ingress-nginx-controller"
       "namespace" = "ingress-nginx"
     }
@@ -614,12 +618,18 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
             "app.kubernetes.io/instance"  = "ingress-nginx"
             "app.kubernetes.io/name"      = "ingress-nginx"
           }
+          "annotations" = {
+            "prometheus.io/scrape" = "true"
+            "prometheus.io/port" = "10254"
+            "prometheus.io/scheme" = "http"
+          }
         }
         "spec" = {
           "containers" = [
             {
               "args" = [
                 "/nginx-ingress-controller",
+                "--enable-metrics",
                 "--election-id=ingress-controller-leader",
                 "--controller-class=k8s.io/ingress-nginx",
                 "--ingress-class=nginx",
@@ -690,6 +700,11 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
                   "name"          = "webhook"
                   "protocol"      = "TCP"
                 },
+                {
+                  "containerPort" = 10254
+                  "name"          = "nginx-metrics"
+                  "protocol"      = "TCP"
+                },
               ]
               "readinessProbe" = {
                 "failureThreshold" = 3
@@ -752,7 +767,7 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
 
 resource "kubernetes_manifest" "job_ingress_nginx_ingress_nginx_admission_create" {
   computed_fields = ["spec.template.metadata.labels"]
-  depends_on = [kubernetes_manifest.namespace_ingress_nginx]
+  depends_on = [kubernetes_manifest.namespace_ingress_nginx, kubernetes_manifest.clusterrole_ingress_nginx_admission]
   manifest = {
     "apiVersion" = "batch/v1"
     "kind"       = "Job"
@@ -826,7 +841,7 @@ resource "kubernetes_manifest" "job_ingress_nginx_ingress_nginx_admission_create
 
 resource "kubernetes_manifest" "job_ingress_nginx_ingress_nginx_admission_patch" {
   computed_fields = ["spec.template.metadata.labels"]
-  depends_on = [kubernetes_manifest.namespace_ingress_nginx]
+  depends_on = [kubernetes_manifest.namespace_ingress_nginx, kubernetes_manifest.clusterrole_ingress_nginx_admission]
   manifest = {
     "apiVersion" = "batch/v1"
     "kind"       = "Job"
