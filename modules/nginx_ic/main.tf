@@ -752,7 +752,7 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
 
 resource "kubernetes_manifest" "job_ingress_nginx_ingress_nginx_admission_create" {
   computed_fields = ["spec.template.metadata.labels"]
-  depends_on = [kubernetes_manifest.namespace_ingress_nginx]
+  depends_on = [kubernetes_manifest.namespace_ingress_nginx, kubernetes_manifest.clusterrole_ingress_nginx_admission]
   manifest = {
     "apiVersion" = "batch/v1"
     "kind"       = "Job"
@@ -826,7 +826,7 @@ resource "kubernetes_manifest" "job_ingress_nginx_ingress_nginx_admission_create
 
 resource "kubernetes_manifest" "job_ingress_nginx_ingress_nginx_admission_patch" {
   computed_fields = ["spec.template.metadata.labels"]
-  depends_on = [kubernetes_manifest.namespace_ingress_nginx]
+  depends_on = [kubernetes_manifest.namespace_ingress_nginx, kubernetes_manifest.clusterrole_ingress_nginx_admission]
   manifest = {
     "apiVersion" = "batch/v1"
     "kind"       = "Job"

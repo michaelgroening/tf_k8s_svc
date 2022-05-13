@@ -40,18 +40,9 @@ resource "kubernetes_secret" "kiali" {
   depends_on = [kubernetes_namespace.istio_system]
 }
 
-resource "local_file" "istio-config" {
-  content = templatefile("${path.module}/templates/istio-aks.tmpl", {
-    enableGrafana = false
-    enableKiali   = false
-    enableTracing = false
-  })
-  filename = "istio-aks.yaml"
-}
-
 resource "null_resource" "istio" {
   provisioner "local-exec" {
     command = "yes | ~/.istioctl/bin/istioctl install --kubeconfig \"${var.kubeconfig_path}\""
   }
-  depends_on = [kubernetes_secret.grafana, kubernetes_secret.kiali, local_file.istio-config]
+  depends_on = [kubernetes_secret.grafana, kubernetes_secret.kiali]
 }
