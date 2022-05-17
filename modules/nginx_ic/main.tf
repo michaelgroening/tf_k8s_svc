@@ -490,7 +490,7 @@ resource "kubernetes_manifest" "configmap_ingress_nginx_ingress_nginx_controller
       "allow-snippet-annotations" = "true"
       "use-forwarded-headers" = "true"
       "compute-full-forwarded-for" = "true"
-      "use-proxy-protocol" = "false"
+      "use-proxy-protocol" = "true"
     }
     "kind" = "ConfigMap"
     "metadata" = {
@@ -526,7 +526,7 @@ resource "kubernetes_manifest" "service_ingress_nginx_ingress_nginx_controller" 
         "load-balancer.hetzner.cloud/name" = "kubelb"
         "load-balancer.hetzner.cloud/health-check-protocol": "http"
         "load-balancer.hetzner.cloud/health-check-http-path": "/healthz"
-        "load-balancer.hetzner.cloud/uses-proxyprotocol": "false"
+        "load-balancer.hetzner.cloud/uses-proxyprotocol": "true"
         "load-balancer.hetzner.cloud/protocol": "tcp"
       }
     }
