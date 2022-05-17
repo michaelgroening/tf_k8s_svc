@@ -488,6 +488,9 @@ resource "kubernetes_manifest" "configmap_ingress_nginx_ingress_nginx_controller
     "apiVersion" = "v1"
     "data" = {
       "allow-snippet-annotations" = "true"
+      "use-forwarded-headers" = "true"
+      "compute-full-forwarded-for" = "true"
+      "use-proxy-protocol" = "false"
     }
     "kind" = "ConfigMap"
     "metadata" = {
@@ -519,22 +522,21 @@ resource "kubernetes_manifest" "service_ingress_nginx_ingress_nginx_controller" 
       }
       "name"      = "ingress-nginx-controller"
       "namespace" = "ingress-nginx"
+      "annotations" = {
+        "load-balancer.hetzner.cloud/name" = "kubelb"
+        "load-balancer.hetzner.cloud/health-check-protocol": "http"
+        "load-balancer.hetzner.cloud/health-check-http-path": "/healthz"
+        "load-balancer.hetzner.cloud/uses-proxyprotocol": "false"
+        "load-balancer.hetzner.cloud/protocol": "tcp"
+      }
     }
     "spec" = {
       "ports" = [
         {
-          "appProtocol" = "http"
           "name"        = "http"
           "port"        = 80
           "protocol"    = "TCP"
           "targetPort"  = "http"
-        },
-        {
-          "appProtocol" = "https"
-          "name"        = "https"
-          "port"        = 443
-          "protocol"    = "TCP"
-          "targetPort"  = "https"
         },
       ]
       "selector" = {
@@ -542,7 +544,8 @@ resource "kubernetes_manifest" "service_ingress_nginx_ingress_nginx_controller" 
         "app.kubernetes.io/instance"  = "ingress-nginx"
         "app.kubernetes.io/name"      = "ingress-nginx"
       }
-      "type" = "NodePort"
+      "type" = "LoadBalancer"
+      "externalTrafficPolicy" = "Cluster"
     }
   }
 }
