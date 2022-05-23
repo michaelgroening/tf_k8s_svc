@@ -1,0 +1,117 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: prometheus-metrics
+spec:
+  selector:
+    matchLabels:
+      name: node-exporter
+      phase: prod
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        name: node-exporter
+        phase: prod
+    spec:
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+            type: ''
+        - name: sys
+          hostPath:
+            path: /sys
+            type: ''
+        - name: root
+          hostPath:
+            path: /
+            type: ''
+      containers:
+        - name: node-exporter
+          image: 'quay.io/prometheus/node-exporter:v1.1.2'
+          args:
+            - '--path.procfs=/host/proc'
+            - '--path.sysfs=/host/sys'
+            - '--path.rootfs=/host/root'
+            - >-
+              --collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker|var/lib/containerd|var/lib/containers/.+)($|/)
+            - >-
+              --collector.filesystem.ignored-fs-types=^(autofs|binfmt_misc|cgroup|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|sysfs|tracefs)$
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 24Mi
+          volumeMounts:
+            - name: proc
+              readOnly: true
+              mountPath: /host/proc
+            - name: sys
+              readOnly: true
+              mountPath: /host/sys
+            - name: root
+              readOnly: true
+              mountPath: /host/root
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      hostPID: true
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+      schedulerName: default-scheduler
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  revisionHistoryLimit: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: prometheus-metrics
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  ports:
+    - name: metrics
+      protocol: TCP
+      port: 80
+      targetPort: 9100
+  selector:
+    name: node-exporter
+    phase: prod
+  type: ClusterIP
+  sessionAffinity: None
+
+
