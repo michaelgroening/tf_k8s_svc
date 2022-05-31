@@ -208,6 +208,7 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
           namespaces:
             names:
               - prometheus-metrics
+              - ingress-nginx
 
         relabel_configs:
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
@@ -246,6 +247,7 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
           namespaces:
             names:
               - prometheus-metrics
+              - ingress-nginx
 
         relabel_configs:
         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
@@ -933,7 +935,7 @@ resource "kubernetes_manifest" "statefulset_prometheus_metrics_prometheus" {
                 "--storage.tsdb.min-block-duration=2h",
                 "--storage.tsdb.max-block-duration=2h",
               ]
-              "image" = "quay.io/prometheus/prometheus:v2.27.1"
+              "image" = "quay.io/prometheus/prometheus:v2.35.0"
               "imagePullPolicy" = "IfNotPresent"
               "livenessProbe" = {
                 "failureThreshold" = 3
@@ -1140,6 +1142,7 @@ resource "kubernetes_manifest" "clusterrolebinding_prometheus_metrics" {
   }
 }
 resource "kubernetes_manifest" "daemonset_prometheus_metrics_node_exporter" {
+  computed_fields = ["metadata"]
   depends_on = [
     kubernetes_manifest.namespace_prometheus_metrics
   ]
@@ -1195,7 +1198,7 @@ resource "kubernetes_manifest" "daemonset_prometheus_metrics_node_exporter" {
                 "--collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker|var/lib/containerd|var/lib/containers/.+)($|/)",
                 "--collector.filesystem.ignored-fs-types=^(autofs|binfmt_misc|cgroup|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|sysfs|tracefs)$",
               ]
-              "image" = "quay.io/prometheus/node-exporter:v1.1.2"
+              "image" = "quay.io/prometheus/node-exporter:v1.3.1"
               "imagePullPolicy" = "IfNotPresent"
               "name" = "node-exporter"
               "ports" = [
@@ -1380,7 +1383,7 @@ resource "kubernetes_manifest" "deployment_prometheus_metrics_kube_state_metrics
           }
           "containers" = [
             {
-              "image" = "k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0"
+              "image" = "k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.4.2"
               "imagePullPolicy" = "IfNotPresent"
               "name" = "kube-state-metrics"
               "ports" = [
@@ -1652,6 +1655,7 @@ resource "kubernetes_manifest" "clusterrole_kube_state_metrics" {
         ]
         "resources" = [
           "networkpolicies",
+          "ingresses"
         ]
         "verbs" = [
           "list",

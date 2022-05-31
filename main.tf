@@ -4,6 +4,12 @@ module "nginx_ingress" {
   cluster_name       = var.cluster_name
 }
 
+/* module "elastic" {
+  source           = "./modules/elastic"
+  kubeconfig_path  = var.kubeconfig_path
+  cluster_name     = var.cluster_name
+} */
+
 module "prometheus" {
   source             = "./modules/prometheus"
   kubeconfig_path    = var.kubeconfig_path

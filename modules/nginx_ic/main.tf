@@ -598,6 +598,7 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
         "app.kubernetes.io/part-of"   = "ingress-nginx"
         "app.kubernetes.io/version"   = "1.2.0"
       }
+
       "name"      = "ingress-nginx-controller"
       "namespace" = "ingress-nginx"
     }
@@ -617,12 +618,18 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
             "app.kubernetes.io/instance"  = "ingress-nginx"
             "app.kubernetes.io/name"      = "ingress-nginx"
           }
+          "annotations" = {
+            "prometheus.io/scrape" = "true"
+            "prometheus.io/port" = "10254"
+            "prometheus.io/scheme" = "http"
+          }
         }
         "spec" = {
           "containers" = [
             {
               "args" = [
                 "/nginx-ingress-controller",
+                "--enable-metrics",
                 "--election-id=ingress-controller-leader",
                 "--controller-class=k8s.io/ingress-nginx",
                 "--ingress-class=nginx",
@@ -691,6 +698,11 @@ resource "kubernetes_manifest" "deployment_ingress_nginx_ingress_nginx_controlle
                 {
                   "containerPort" = 8443
                   "name"          = "webhook"
+                  "protocol"      = "TCP"
+                },
+                {
+                  "containerPort" = 10254
+                  "name"          = "nginx-metrics"
                   "protocol"      = "TCP"
                 },
               ]
