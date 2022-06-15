@@ -381,6 +381,10 @@ spec:
         app.kubernetes.io/component: controller
         app.kubernetes.io/instance: ingress-nginx
         app.kubernetes.io/name: ingress-nginx
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9113"
+      prometheus.io/scheme: http
     spec:
       containers:
       - args:
@@ -430,6 +434,9 @@ spec:
           protocol: TCP
         - containerPort: 8443
           name: webhook
+          protocol: TCP
+        - containerPort: 9113
+          name: prometheus
           protocol: TCP
         readinessProbe:
           failureThreshold: 3

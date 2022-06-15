@@ -1,0 +1,33 @@
+---
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: quickstart
+spec:
+  version: 8.2.1
+  count: 1
+  elasticsearchRef:
+    name: quickstart
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+
+# ---
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: kibana-ingress
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#   - host: kibana.kube.home
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: quickstart-kb-http
+#             port:
+#               number: 5601

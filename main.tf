@@ -3,9 +3,9 @@ module "nginx_ingress" {
   kubeconfig_path    = var.kubeconfig_path
   cluster_name       = var.cluster_name
 }
-
-/* module "elastic" {
-  source           = "./modules/elastic"
+/*
+module "eck" {
+  source           = "./modules/eck"
   kubeconfig_path  = var.kubeconfig_path
   cluster_name     = var.cluster_name
 } */
@@ -22,9 +22,15 @@ module "grafana" {
   cluster_name       = var.cluster_name
 }
 
-// module "istio" {
-//   source             = "./modules/istio"
-//   kubeconfig_path    = var.kubeconfig_path
-//   cluster_name       = var.cluster_name
-//   istio_password     = var.istio_password
-// }
+module "loki" {
+  source             = "./modules/loki"
+  kubeconfig_path    = var.kubeconfig_path
+  cluster_name       = var.cluster_name
+}
+
+/*  module "istio" {
+   source             = "./modules/istio"
+   kubeconfig_path    = var.kubeconfig_path
+   cluster_name       = var.cluster_name
+   istio_password     = var.istio_password
+} */
