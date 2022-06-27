@@ -108,7 +108,7 @@
   "gnetId": 9614,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1656337158274,
+  "iteration": 1656338947352,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1428,10 +1428,11 @@
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "expr": "rate({app=\"ingress-nginx\",pod=~\"ingress-nginx-controller.*\"}[1m])",
+          "expr": "rate({app=\"ingress-nginx\",pod=\"ingress-nginx-controller-77759fbd45-2ltts\"}[30s])",
           "hide": false,
           "legendFormat": "{{ pod }}",
-          "refId": "C"
+          "refId": "C",
+          "resolution": 1
         }
       ],
       "title": "Panel Title",
@@ -1593,7 +1594,7 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -1624,6 +1625,6 @@
   "timezone": "browser",
   "title": "NGINX Ingress controller",
   "uid": "nginx",
-  "version": 1,
+  "version": 4,
   "weekStart": ""
 }
