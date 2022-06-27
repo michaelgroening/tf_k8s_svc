@@ -1,4 +1,47 @@
 {
+    "__inputs": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Prometheus",
+        "description": "",
+        "type": "datasource",
+        "pluginId": "prometheus",
+        "pluginName": "Prometheus"
+      }
+    ],
+    "__elements": [],
+    "__requires": [
+      {
+        "type": "grafana",
+        "id": "grafana",
+        "name": "Grafana",
+        "version": "8.4.4"
+      },
+      {
+        "type": "panel",
+        "id": "graph",
+        "name": "Graph (old)",
+        "version": ""
+      },
+      {
+        "type": "datasource",
+        "id": "prometheus",
+        "name": "Prometheus",
+        "version": "1.0.0"
+      },
+      {
+        "type": "panel",
+        "id": "stat",
+        "name": "Stat",
+        "version": ""
+      },
+      {
+        "type": "panel",
+        "id": "table-old",
+        "name": "Table (old)",
+        "version": ""
+      }
+    ],
     "annotations": {
       "list": [
         {
@@ -17,7 +60,7 @@
           "type": "dashboard"
         },
         {
-          "datasource": "69BWnEC7k",
+          "datasource": "${DS_PROMETHEUS}",
           "enable": true,
           "expr": "sum(changes(nginx_ingress_controller_config_last_reload_successful_timestamp_seconds{instance!=\"unknown\",controller_class=~\"$controller_class\",namespace=~\"$namespace\"}[30s])) by (controller_class)",
           "hide": false,
@@ -38,12 +81,16 @@
     "fiscalYearStartMonth": 0,
     "gnetId": 9614,
     "graphTooltip": 0,
-    "id": 2,
-    "iteration": 1653999289359,
+    "id": null,
+    "iteration": 1655991755794,
     "links": [],
     "liveNow": false,
     "panels": [
       {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -100,28 +147,16 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "69BWnEC7k"
+              "uid": "${DS_PROMETHEUS}"
             },
             "exemplar": true,
-            "expr": "round(sum(irate(nginx_ingress_controller_requests{controller_pod=~\"$controller\",controller_class=~\"$controller_class\",controller_namespace=~\"$namespace\"}[2m])), 0.001)",
+            "expr": "round(sum(irate(nginx_ingress_controller_requests[2m])), 0.001)",
             "format": "time_series",
             "interval": "",
             "intervalFactor": 1,
             "legendFormat": "",
             "refId": "A",
             "step": 4
-          },
-          {
-            "datasource": {
-              "type": "prometheus",
-              "uid": "69BWnEC7k"
-            },
-            "exemplar": true,
-            "expr": "",
-            "hide": false,
-            "interval": "",
-            "legendFormat": "",
-            "refId": "B"
           }
         ],
         "title": "Controller Request Volume",
@@ -130,7 +165,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "fieldConfig": {
           "defaults": {
@@ -204,6 +239,10 @@
         "type": "stat"
       },
       {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -270,22 +309,23 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "69BWnEC7k"
+              "uid": "${DS_PROMETHEUS}"
             },
             "exemplar": true,
             "expr": "sum(rate(nginx_ingress_controller_requests{controller_pod=~\"$controller\",controller_class=~\"$controller_class\",controller_namespace=~\"$namespace\",status!~\"[4-5].*\"}[2m])) / sum(rate(nginx_ingress_controller_requests{controller_pod=~\"$controller\",controller_class=~\"$controller_class\",controller_namespace=~\"$namespace\"}[2m]))",
-            "format": "time_series",
             "interval": "",
-            "intervalFactor": 1,
             "legendFormat": "",
-            "refId": "A",
-            "step": 4
+            "refId": "A"
           }
         ],
         "title": "Controller Success Rate (non-4|5xx responses)",
         "type": "stat"
       },
       {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -349,23 +389,40 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "69BWnEC7k"
+              "uid": "${DS_PROMETHEUS}"
             },
             "exemplar": false,
-            "expr": "avg(nginx_ingress_controller_success{controller_pod=~\"$controller\",controller_class=~\"$controller_class\",controller_namespace=~\"$namespace\"})",
+            "expr": "count(nginx_ingress_controller_config_last_reload_successful{controller_pod=~\"$controller\",controller_namespace=~\"$namespace\"} == 1)",
             "format": "time_series",
+            "hide": false,
             "instant": true,
             "interval": "",
             "intervalFactor": 1,
             "legendFormat": "",
             "refId": "A",
             "step": 4
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${DS_PROMETHEUS}"
+            },
+            "exemplar": true,
+            "expr": "nginx_ingress_controller_config_last_reload_successful",
+            "hide": true,
+            "interval": "",
+            "legendFormat": "",
+            "refId": "B"
           }
         ],
         "title": "Config Reloads",
         "type": "stat"
       },
       {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -429,17 +486,9 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "69BWnEC7k"
+              "uid": "${DS_PROMETHEUS}"
             },
-            "exemplar": false,
-            "expr": "count(nginx_ingress_controller_config_last_reload_successful{controller_pod=~\"$controller\",controller_namespace=~\"$namespace\"} == 0)",
-            "format": "time_series",
-            "instant": true,
-            "interval": "",
-            "intervalFactor": 1,
-            "legendFormat": "",
-            "refId": "A",
-            "step": 4
+            "refId": "A"
           }
         ],
         "title": "Last Config Failed",
@@ -452,7 +501,7 @@
         "dashes": false,
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "decimals": 2,
         "editable": true,
@@ -608,7 +657,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "69BWnEC7k"
+              "uid": "${DS_PROMETHEUS}"
             },
             "exemplar": true,
             "expr": "sum(rate(nginx_ingress_controller_requests{controller_pod=~\"$controller\",controller_class=~\"$controller_class\",controller_namespace=~\"$namespace\",ingress=~\"$ingress\",status!~\"[4-5].*\"}[2m])) by (ingress) / sum(rate(nginx_ingress_controller_requests{controller_pod=~\"$controller\",controller_class=~\"$controller_class\",controller_namespace=~\"$namespace\",ingress=~\"$ingress\"}[2m])) by (ingress)",
@@ -660,7 +709,7 @@
         "dashes": false,
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "decimals": 2,
         "editable": true,
@@ -774,7 +823,7 @@
         "dashes": false,
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "decimals": 2,
         "editable": false,
@@ -875,7 +924,7 @@
         "dashes": false,
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "decimals": 3,
         "editable": false,
@@ -975,7 +1024,7 @@
         "columns": [],
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "fontSize": "100%",
         "gridPos": {
@@ -1200,11 +1249,11 @@
         ],
         "datasource": {
           "type": "prometheus",
-          "uid": "69BWnEC7k"
+          "uid": "${DS_PROMETHEUS}"
         },
         "fontSize": "100%",
         "gridPos": {
-          "h": 8,
+          "h": 4,
           "w": 24,
           "x": 0,
           "y": 24
@@ -1287,14 +1336,10 @@
       "list": [
         {
           "allValue": ".*",
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
-            "uid": "69BWnEC7k"
+            "uid": "${DS_PROMETHEUS}"
           },
           "definition": "",
           "hide": 0,
@@ -1318,14 +1363,10 @@
         },
         {
           "allValue": ".*",
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
-            "uid": "69BWnEC7k"
+            "uid": "${DS_PROMETHEUS}"
           },
           "definition": "",
           "hide": 0,
@@ -1349,14 +1390,10 @@
         },
         {
           "allValue": ".*",
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
-            "uid": "69BWnEC7k"
+            "uid": "${DS_PROMETHEUS}"
           },
           "definition": "",
           "hide": 0,
@@ -1380,14 +1417,10 @@
         },
         {
           "allValue": ".*",
-          "current": {
-            "selected": false,
-            "text": "All",
-            "value": "$__all"
-          },
+          "current": {},
           "datasource": {
             "type": "prometheus",
-            "uid": "69BWnEC7k"
+            "uid": "${DS_PROMETHEUS}"
           },
           "definition": "",
           "hide": 0,
@@ -1443,6 +1476,6 @@
     "timezone": "browser",
     "title": "NGINX Ingress controller",
     "uid": "nginx",
-    "version": 2,
+    "version": 1,
     "weekStart": ""
   }

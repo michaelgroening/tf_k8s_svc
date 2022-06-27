@@ -209,6 +209,7 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
             names:
               - prometheus-metrics
               - ingress-nginx
+              - loki
 
         relabel_configs:
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
@@ -248,6 +249,7 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
             names:
               - prometheus-metrics
               - ingress-nginx
+              - loki
 
         relabel_configs:
         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]

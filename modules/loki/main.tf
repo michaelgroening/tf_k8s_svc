@@ -684,6 +684,8 @@ resource "kubernetes_manifest" "daemonset_loki_simple_promtail" {
         "metadata" = {
           "annotations" = {
             "checksum/config" = "e2dacf332b457c568e5ba194e9bbb56fbd0607f5fd0b1f9eb7ed09927344da53"
+            "prometheus.io/port" = "http-metrics"
+            "prometheus.io/scrape" = "true"
           }
           "labels" = {
             "app.kubernetes.io/instance" = "simple"
