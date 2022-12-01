@@ -198,8 +198,7 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
       #
       # * `prometheus.io/probe`: Only probe services that have a value of `true`
       - job_name: 'kubernetes-services'
-
-        metrics_path: /probe
+        metrics_path: /metrics
         params:
           module: [http_2xx]
 
@@ -212,25 +211,9 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
               - loki
 
         relabel_configs:
-        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
           action: keep
           regex: true
-        - source_labels: [__address__]
-          target_label: __param_target
-        - target_label: __address__
-          replacement: blackbox
-        - source_labels: [__param_target]
-          target_label: instance
-        - action: labelmap
-          regex: __meta_kubernetes_service_label_(.+)
-        - source_labels: [__meta_kubernetes_service_name]
-          target_label: job
-        metric_relabel_configs:
-        - source_labels:
-            - namespace
-          action: replace
-          regex: (.+)
-          target_label: kubernetes_namespace
 
       # Example scrape config for pods
       #
@@ -930,6 +913,7 @@ resource "kubernetes_manifest" "statefulset_prometheus_metrics_prometheus" {
             {
               "args" = [
                 "--web.listen-address=0.0.0.0:9090",
+                "--web.enable-lifecycle",
                 "--config.file=/etc/prometheus/prometheus.yaml",
                 "--storage.tsdb.path=/var/lib/prometheus",
                 "--storage.tsdb.retention.time=2d",
