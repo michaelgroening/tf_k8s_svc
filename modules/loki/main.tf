@@ -8,65 +8,21 @@ resource "kubernetes_manifest" "namespace_loki" {
   }
 }
 
-resource "kubernetes_manifest" "podsecuritypolicy_simple_loki" {
-  depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "policy/v1beta1"
-    "kind" = "PodSecurityPolicy"
-    "metadata" = {
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki"
-    }
-    "spec" = {
-      "allowPrivilegeEscalation" = false
-      "fsGroup" = {
-        "ranges" = [
-          {
-            "max" = 65535
-            "min" = 1
-          },
-        ]
-        "rule" = "MustRunAs"
-      }
-      /* "hostIPC" = false
-      "hostNetwork" = false
-      "hostPID" = false
-      "privileged" = false */
-      "readOnlyRootFilesystem" = true
-      "requiredDropCapabilities" = [
-        "ALL",
-      ]
-      "runAsUser" = {
-        "rule" = "MustRunAsNonRoot"
-      }
-      "seLinux" = {
-        "rule" = "RunAsAny"
-      }
-      "supplementalGroups" = {
-        "ranges" = [
-          {
-            "max" = 65535
-            "min" = 1
-          },
-        ]
-        "rule" = "MustRunAs"
-      }
-      "volumes" = [
-        "configMap",
-        "emptyDir",
-        "persistentVolumeClaim",
-        "secret",
-        "projected",
-        "downwardAPI",
-      ]
-    }
-  }
-}
+# resource "kubernetes_service_account" "simple_loki" {
+#   depends_on = [kubernetes_manifest.namespace_loki]
+#   metadata {
+#     name      = "simple-loki"
+#     namespace = "loki"
+#     labels = {
+#       app = "loki"
+#       chart = "loki-2.16.0"
+#       heritage = "Helm"
+#       release = "simple-loki"
+#     }
+#   }
+#   automount_service_account_token = true
+# }
+
 
 resource "kubernetes_manifest" "serviceaccount_loki_simple_loki" {
   depends_on = [kubernetes_manifest.namespace_loki]
@@ -78,7 +34,7 @@ resource "kubernetes_manifest" "serviceaccount_loki_simple_loki" {
       "annotations" = {}
       "labels" = {
         "app" = "loki"
-        "chart" = "loki-2.12.0"
+        "chart" = "loki-2.16.0"
         "heritage" = "Helm"
         "release" = "simple"
       }
@@ -88,15 +44,19 @@ resource "kubernetes_manifest" "serviceaccount_loki_simple_loki" {
   }
 }
 
-resource "kubernetes_manifest" "secret_loki_simple_loki" {
-  computed_fields = ["stringData","data"]
+resource "kubernetes_secret" "simple_loki" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "v1"
-    /* "data" = {
-      "loki.yaml" = "YXV0aF9lbmFibGVkOiBmYWxzZQpjaHVua19zdG9yZV9jb25maWc6CiAgbWF4X2xvb2tfYmFja19wZXJpb2Q6IDBzCmNvbXBhY3RvcjoKICBzaGFyZWRfc3RvcmU6IGZpbGVzeXN0ZW0KICB3b3JraW5nX2RpcmVjdG9yeTogL2RhdGEvbG9raS9ib2x0ZGItc2hpcHBlci1jb21wYWN0b3IKaW5nZXN0ZXI6CiAgY2h1bmtfYmxvY2tfc2l6ZTogMjYyMTQ0CiAgY2h1bmtfaWRsZV9wZXJpb2Q6IDNtCiAgY2h1bmtfcmV0YWluX3BlcmlvZDogMW0KICBsaWZlY3ljbGVyOgogICAgcmluZzoKICAgICAgcmVwbGljYXRpb25fZmFjdG9yOiAxCiAgbWF4X3RyYW5zZmVyX3JldHJpZXM6IDAKICB3YWw6CiAgICBkaXI6IC9kYXRhL2xva2kvd2FsCmxpbWl0c19jb25maWc6CiAgZW5mb3JjZV9tZXRyaWNfbmFtZTogZmFsc2UKICBtYXhfZW50cmllc19saW1pdF9wZXJfcXVlcnk6IDUwMDAKICByZWplY3Rfb2xkX3NhbXBsZXM6IHRydWUKICByZWplY3Rfb2xkX3NhbXBsZXNfbWF4X2FnZTogMTY4aAptZW1iZXJsaXN0OgogIGpvaW5fbWVtYmVyczoKICAtICdyZWxlYXNlLW5hbWUtbG9raS1tZW1iZXJsaXN0JwpzY2hlbWFfY29uZmlnOgogIGNvbmZpZ3M6CiAgLSBmcm9tOiAiMjAyMC0xMC0yNCIKICAgIGluZGV4OgogICAgICBwZXJpb2Q6IDI0aAogICAgICBwcmVmaXg6IGluZGV4XwogICAgb2JqZWN0X3N0b3JlOiBmaWxlc3lzdGVtCiAgICBzY2hlbWE6IHYxMQogICAgc3RvcmU6IGJvbHRkYi1zaGlwcGVyCnNlcnZlcjoKICBncnBjX2xpc3Rlbl9wb3J0OiA5MDk1CiAgaHR0cF9saXN0ZW5fcG9ydDogMzEwMApzdG9yYWdlX2NvbmZpZzoKICBib2x0ZGJfc2hpcHBlcjoKICAgIGFjdGl2ZV9pbmRleF9kaXJlY3Rvcnk6IC9kYXRhL2xva2kvYm9sdGRiLXNoaXBwZXItYWN0aXZlCiAgICBjYWNoZV9sb2NhdGlvbjogL2RhdGEvbG9raS9ib2x0ZGItc2hpcHBlci1jYWNoZQogICAgY2FjaGVfdHRsOiAyNGgKICAgIHNoYXJlZF9zdG9yZTogZmlsZXN5c3RlbQogIGZpbGVzeXN0ZW06CiAgICBkaXJlY3Rvcnk6IC9kYXRhL2xva2kvY2h1bmtzCnRhYmxlX21hbmFnZXI6CiAgcmV0ZW50aW9uX2RlbGV0ZXNfZW5hYmxlZDogZmFsc2UKICByZXRlbnRpb25fcGVyaW9kOiAwcw=="
-    } */
-    "stringData" = {
+  metadata {
+    name      = "simple-loki"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
+    }
+  }
+  data = {
       "loki.yaml" = <<-EOT
       auth_enabled: false
       chunk_store_config:
@@ -145,325 +105,270 @@ resource "kubernetes_manifest" "secret_loki_simple_loki" {
       table_manager:
         retention_deletes_enabled: false
         retention_period: 0s
-      EOT
-    }
-    "kind" = "Secret"
-    "metadata" = {
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki"
-      "namespace" = "loki"
-    }
+      EOT    
   }
 }
 
-resource "kubernetes_manifest" "role_loki_simple_loki" {
+resource "kubernetes_role" "simple_loki" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "Role"
-    "metadata" = {
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-loki"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
     }
-    "rules" = [
-      {
-        "apiGroups" = [
-          "extensions",
-        ]
-        "resourceNames" = [
-          "simple-loki",
-        ]
-        "resources" = [
-          "podsecuritypolicies",
-        ]
-        "verbs" = [
-          "use",
-        ]
-      },
-    ]
+  }
+  rule {
+    verbs          = ["use"]
+    api_groups     = ["extensions"]
+    resources      = ["podsecuritypolicies"]
+    resource_names = ["simple-loki"]
   }
 }
 
-resource "kubernetes_manifest" "rolebinding_loki_simple_loki" {
+resource "kubernetes_role_binding" "simple_loki" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "RoleBinding"
-    "metadata" = {
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-loki"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
     }
-    "roleRef" = {
-      "apiGroup" = "rbac.authorization.k8s.io"
-      "kind" = "Role"
-      "name" = "simple-loki"
-    }
-    "subjects" = [
-      {
-        "kind" = "ServiceAccount"
-        "name" = "simple-loki"
-      },
-    ]
+  }
+  subject {
+    kind = "ServiceAccount"
+    name = "simple-loki"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = "simple-loki"
   }
 }
 
-resource "kubernetes_manifest" "service_loki_simple_loki_headless" {
+resource "kubernetes_service" "simple_loki_headless" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Service"
-    "metadata" = {
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-        "variant" = "headless"
-      }
-      "name" = "simple-loki-headless"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-loki-headless"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
+      variant = "headless"
     }
-    "spec" = {
-      "clusterIP" = "None"
-      "ports" = [
-        {
-          "name" = "http-metrics"
-          "port" = 3100
-          "protocol" = "TCP"
-          "targetPort" = "http-metrics"
-        },
-      ]
-      "selector" = {
-        "app" = "loki"
-        "release" = "simple"
-      }
+    annotations = {
+      "prometheus.io/port" = "10254"
+      "prometheus.io/scrape" = "true"
     }
+  }
+  spec {
+    port {
+      name        = "http-metrics"
+      protocol    = "TCP"
+      port        = 3100
+      target_port = "http-metrics"
+    }
+    selector = {
+      app = "loki"
+      release = "simple-loki"
+    }
+    cluster_ip = "None"
   }
 }
 
-resource "kubernetes_manifest" "service_loki_simple_loki_memberlist" {
+resource "kubernetes_service" "simple_loki_memberlist" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Service"
-    "metadata" = {
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki-memberlist"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-loki-memberlist"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
     }
-    "spec" = {
-      "clusterIP" = "None"
-      "ports" = [
-        {
-          "name" = "http"
-          "port" = 7946
-          "protocol" = "TCP"
-          "targetPort" = "memberlist-port"
-        },
-      ]
-      "publishNotReadyAddresses" = true
-      "selector" = {
-        "app" = "loki"
-        "release" = "simple"
-      }
-      "type" = "ClusterIP"
+  }
+  spec {
+    port {
+      name        = "http"
+      protocol    = "TCP"
+      port        = 7946
+      target_port = "memberlist-port"
     }
+    selector = {
+      app = "loki"
+      release = "simple-loki"
+    }
+    cluster_ip                  = "None"
+    type                        = "ClusterIP"
+    publish_not_ready_addresses = true
   }
 }
 
-resource "kubernetes_manifest" "service_loki_simple_loki" {
+
+resource "kubernetes_service" "simple_loki" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Service"
-    "metadata" = {
-      "annotations" = {}
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-loki"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
     }
-    "spec" = {
-      "ports" = [
-        {
-          "name" = "http-metrics"
-          "port" = 3100
-          "protocol" = "TCP"
-          "targetPort" = "http-metrics"
-        },
-      ]
-      "selector" = {
-        "app" = "loki"
-        "release" = "simple"
-      }
-      "type" = "ClusterIP"
+  }
+  spec {
+    port {
+      name        = "http-metrics"
+      protocol    = "TCP"
+      port        = 3100
+      target_port = "http-metrics"
     }
+    selector = {
+      app = "loki"
+      release = "simple-loki"
+    }
+    type = "ClusterIP"
   }
 }
 
-resource "kubernetes_manifest" "statefulset_loki_simple_loki" {
+resource "kubernetes_stateful_set" "simple_loki" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "apps/v1"
-    "kind" = "StatefulSet"
-    "metadata" = {
-      "annotations" = {}
-      "labels" = {
-        "app" = "loki"
-        "chart" = "loki-2.12.0"
-        "heritage" = "Helm"
-        "release" = "simple"
-      }
-      "name" = "simple-loki"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-loki"
+    namespace = "loki"
+    labels = {
+      app = "loki"
+      chart = "loki-2.16.0"
+      heritage = "Helm"
+      release = "simple-loki"
     }
-    "spec" = {
-      "podManagementPolicy" = "OrderedReady"
-      "replicas" = 1
-      "selector" = {
-        "matchLabels" = {
-          "app" = "loki"
-          "release" = "simple"
+  }
+  spec {
+    replicas = 1
+    selector {
+      match_labels = {
+        app = "loki"
+        release = "simple-loki"
+      }
+    }
+    template {
+      metadata {
+        labels = {
+          app = "loki"
+          name = "simple-loki"
+          release = "simple-loki"
+        }
+        annotations = {
+          "checksum/config" = "e6887662aba2935d01a5766684e5341d5f01ae64de47edcd255f93a2cb2bf956"
+          "prometheus.io/port" = "http-metrics"
+          "prometheus.io/scrape" = "true"
         }
       }
-      "serviceName" = "simple-loki-headless"
-      "template" = {
-        "metadata" = {
-          "annotations" = {
-            "checksum/config" = "875b10418b91798afca9405a17e932560628ef4ea178449bc1f263201d9b9d6c"
-            "prometheus.io/port" = "http-metrics"
-            "prometheus.io/scrape" = "true"
-          }
-          "labels" = {
-            "app" = "loki"
-            "name" = "simple-loki"
-            "release" = "simple"
+      spec {
+        volume {
+          name      = "tmp"
+        }
+        volume {
+          name = "config"
+          secret {
+            secret_name = "simple-loki"
           }
         }
-        "spec" = {
-          "affinity" = {}
-          "containers" = [
-            {
-              "args" = [
-                "-config.file=/etc/loki/loki.yaml",
-              ]
-              "env" = null
-              "image" = "grafana/loki:2.5.0"
-              "imagePullPolicy" = "IfNotPresent"
-              "livenessProbe" = {
-                "httpGet" = {
-                  "path" = "/ready"
-                  "port" = "http-metrics"
-                }
-                "initialDelaySeconds" = 45
-              }
-              "name" = "loki"
-              "ports" = [
-                {
-                  "containerPort" = 3100
-                  "name" = "http-metrics"
-                  "protocol" = "TCP"
-                },
-                {
-                  "containerPort" = 9095
-                  "name" = "grpc"
-                  "protocol" = "TCP"
-                },
-                {
-                  "containerPort" = 7946
-                  "name" = "memberlist-port"
-                  "protocol" = "TCP"
-                },
-              ]
-              "readinessProbe" = {
-                "httpGet" = {
-                  "path" = "/ready"
-                  "port" = "http-metrics"
-                }
-                "initialDelaySeconds" = 45
-              }
-              "resources" = {}
-              "securityContext" = {
-                "readOnlyRootFilesystem" = true
-              }
-              "volumeMounts" = [
-                {
-                  "mountPath" = "/tmp"
-                  "name" = "tmp"
-                },
-                {
-                  "mountPath" = "/etc/loki"
-                  "name" = "config"
-                },
-                {
-                  "mountPath" = "/data"
-                  "name" = "storage"
-                  "subPath" = null
-                },
-              ]
-            },
-          ]
-          /* "initContainers" = [] */
-          /* "nodeSelector" = {} */
-          "securityContext" = {
-            "fsGroup" = 10001
-            "runAsGroup" = 10001
-            "runAsNonRoot" = true
-            "runAsUser" = 10001
+        volume {
+          name      = "storage"
+        }
+        container {
+          name  = "loki"
+          image = "grafana/loki:2.6.1"
+          args  = ["-config.file=/etc/loki/loki.yaml"]
+          port {
+            name           = "http-metrics"
+            container_port = 3100
+            protocol       = "TCP"
           }
-          "serviceAccountName" = "simple-loki"
-          "terminationGracePeriodSeconds" = 4800
-          /* "tolerations" = [] */
-          "volumes" = [
-            {
-              "emptyDir" = {}
-              "name" = "tmp"
-            },
-            {
-              "name" = "config"
-              "secret" = {
-                "secretName" = "simple-loki"
-              }
-            },
-            {
-              "emptyDir" = {}
-              "name" = "storage"
-            },
-          ]
+          port {
+            name           = "grpc"
+            container_port = 9095
+            protocol       = "TCP"
+          }
+          port {
+            name           = "memberlist-port"
+            container_port = 7946
+            protocol       = "TCP"
+          }
+          volume_mount {
+            name       = "tmp"
+            mount_path = "/tmp"
+          }
+          volume_mount {
+            name       = "config"
+            mount_path = "/etc/loki"
+          }
+          volume_mount {
+            name       = "storage"
+            mount_path = "/data"
+          }
+          liveness_probe {
+            http_get {
+              path = "/ready"
+              port = "http-metrics"
+            }
+            initial_delay_seconds = 45
+          }
+          readiness_probe {
+            http_get {
+              path = "/ready"
+              port = "http-metrics"
+            }
+            initial_delay_seconds = 45
+          }
+          image_pull_policy = "IfNotPresent"
+          security_context {
+            read_only_root_filesystem = true
+          }
+        }
+        termination_grace_period_seconds = 4800
+        service_account_name             = "simple-loki"
+        security_context {
+          run_as_user     = 10001
+          run_as_group    = 10001
+          run_as_non_root = true
+          fs_group        = 10001
         }
       }
-      "updateStrategy" = {
-        "type" = "RollingUpdate"
-      }
+    }
+    service_name          = "simple-loki-headless"
+    pod_management_policy = "OrderedReady"
+    update_strategy {
+      type = "RollingUpdate"
     }
   }
 }
+
+# resource "kubernetes_service_account" "simple_promtail" {
+#   depends_on = [kubernetes_manifest.namespace_loki]
+#   metadata {
+#     name      = "simple-promtail"
+#     namespace = "loki"
+#     labels = {
+#       "app.kubernetes.io/instance" = "simple-promtail"
+#       "app.kubernetes.io/managed-by" = "Helm"
+#       "app.kubernetes.io/name" = "promtail"
+#       "app.kubernetes.io/version" = "2.6.1"
+#       "helm.sh/chart" = "promtail-6.6.2"
+#     }
+#   }
+# }
 
 resource "kubernetes_manifest" "serviceaccount_loki_simple_promtail" {
   depends_on = [kubernetes_manifest.namespace_loki]
@@ -484,24 +389,20 @@ resource "kubernetes_manifest" "serviceaccount_loki_simple_promtail" {
   }
 }
 
-resource "kubernetes_manifest" "secret_loki_simple_promtail" {
-  computed_fields = ["stringData","data"]
+resource "kubernetes_secret" "simple_promtail" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Secret"
-    "metadata" = {
-      "labels" = {
-        "app.kubernetes.io/instance" = "simple"
-        "app.kubernetes.io/managed-by" = "Helm"
-        "app.kubernetes.io/name" = "promtail"
-        "app.kubernetes.io/version" = "2.5.0"
-        "helm.sh/chart" = "promtail-5.1.0"
-      }
-      "name" = "simple-promtail"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-promtail"
+    namespace = "loki"
+    labels = {
+      "app.kubernetes.io/instance" = "simple-promtail"
+      "app.kubernetes.io/managed-by" = "Helm"
+      "app.kubernetes.io/name" = "promtail"
+      "app.kubernetes.io/version" = "2.6.1"
+      "helm.sh/chart" = "promtail-6.6.2"
     }
-    "stringData" = {
+  }
+  data = {
       "promtail.yaml" = <<-EOT
       server:
         log_level: info
@@ -586,226 +487,178 @@ resource "kubernetes_manifest" "secret_loki_simple_promtail" {
               - __meta_kubernetes_pod_container_name
               target_label: __path__
       EOT
-    }
   }
 }
 
-resource "kubernetes_manifest" "clusterrole_simple_promtail" {
+resource "kubernetes_cluster_role" "simple_promtail" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "ClusterRole"
-    "metadata" = {
-      "labels" = {
-        "app.kubernetes.io/instance" = "simple"
-        "app.kubernetes.io/managed-by" = "Helm"
-        "app.kubernetes.io/name" = "promtail"
-        "app.kubernetes.io/version" = "2.5.0"
-        "helm.sh/chart" = "promtail-5.1.0"
-      }
-      "name" = "simple-promtail"
+  metadata {
+    name = "simple-promtail"
+    labels = {
+      "app.kubernetes.io/instance" = "simple-promtail"
+      "app.kubernetes.io/managed-by" = "Helm"
+      "app.kubernetes.io/name" = "promtail"
+      "app.kubernetes.io/version" = "2.6.1"
+      "helm.sh/chart" = "promtail-6.6.2"
     }
-    "rules" = [
-      {
-        "apiGroups" = [
-          "",
-        ]
-        "resources" = [
-          "nodes",
-          "nodes/proxy",
-          "services",
-          "endpoints",
-          "pods",
-        ]
-        "verbs" = [
-          "get",
-          "watch",
-          "list",
-        ]
-      },
-    ]
+  }
+  rule {
+    verbs      = ["get", "watch", "list"]
+    api_groups = [""]
+    resources  = ["nodes", "nodes/proxy", "services", "endpoints", "pods"]
   }
 }
 
-resource "kubernetes_manifest" "clusterrolebinding_simple_promtail" {
+resource "kubernetes_cluster_role_binding" "simple_promtail" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "ClusterRoleBinding"
-    "metadata" = {
-      "labels" = {
-        "app.kubernetes.io/instance" = "simple"
-        "app.kubernetes.io/managed-by" = "Helm"
-        "app.kubernetes.io/name" = "promtail"
-        "app.kubernetes.io/version" = "2.5.0"
-        "helm.sh/chart" = "promtail-5.1.0"
-      }
-      "name" = "simple-promtail"
+  metadata {
+    name = "simple-promtail"
+    labels = {
+      "app.kubernetes.io/instance" = "simple-promtail"
+      "app.kubernetes.io/managed-by" = "Helm"
+      "app.kubernetes.io/name" = "promtail"
+      "app.kubernetes.io/version" = "2.6.1"
+      "helm.sh/chart" = "promtail-6.6.2"
     }
-    "roleRef" = {
-      "apiGroup" = "rbac.authorization.k8s.io"
-      "kind" = "ClusterRole"
-      "name" = "simple-promtail"
-    }
-    "subjects" = [
-      {
-        "kind" = "ServiceAccount"
-        "name" = "simple-promtail"
-        "namespace" = "loki"
-      },
-    ]
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = "simple-promtail"
+    namespace = "loki"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "simple-promtail"
   }
 }
 
-resource "kubernetes_manifest" "daemonset_loki_simple_promtail" {
+
+resource "kubernetes_daemonset" "simple_promtail" {
   depends_on = [kubernetes_manifest.namespace_loki]
-  manifest = {
-    "apiVersion" = "apps/v1"
-    "kind" = "DaemonSet"
-    "metadata" = {
-      "labels" = {
-        "app.kubernetes.io/instance" = "simple"
-        "app.kubernetes.io/managed-by" = "Helm"
-        "app.kubernetes.io/name" = "promtail"
-        "app.kubernetes.io/version" = "2.5.0"
-        "helm.sh/chart" = "promtail-5.1.0"
-      }
-      "name" = "simple-promtail"
-      "namespace" = "loki"
+  metadata {
+    name      = "simple-promtail"
+    namespace = "loki"
+    labels = {
+      "app.kubernetes.io/instance" = "simple-promtail"
+      "app.kubernetes.io/managed-by" = "Helm"
+      "app.kubernetes.io/name" = "promtail"
+      "app.kubernetes.io/version" = "2.6.1"
+      "helm.sh/chart" = "promtail-6.6.2"
     }
-    "spec" = {
-      "selector" = {
-        "matchLabels" = {
-          "app.kubernetes.io/instance" = "simple"
+  }
+  spec {
+    selector {
+      match_labels = {
+        "app.kubernetes.io/instance" = "simple-promtail"
+        "app.kubernetes.io/name" = "promtail"
+      }
+    }
+    template {
+      metadata {
+        labels = {
+          "app.kubernetes.io/instance" = "simple-promtail"
           "app.kubernetes.io/name" = "promtail"
         }
-      }
-      "template" = {
-        "metadata" = {
-          "annotations" = {
-            "checksum/config" = "e2dacf332b457c568e5ba194e9bbb56fbd0607f5fd0b1f9eb7ed09927344da53"
-            "prometheus.io/port" = "http-metrics"
-            "prometheus.io/scrape" = "true"
-          }
-          "labels" = {
-            "app.kubernetes.io/instance" = "simple"
-            "app.kubernetes.io/name" = "promtail"
-          }
-        }
-        "spec" = {
-          "containers" = [
-            {
-              "args" = [
-                "-config.file=/etc/promtail/promtail.yaml",
-              ]
-              "env" = [
-                {
-                  "name" = "HOSTNAME"
-                  "valueFrom" = {
-                    "fieldRef" = {
-                      "fieldPath" = "spec.nodeName"
-                    }
-                  }
-                },
-              ]
-              "image" = "docker.io/grafana/promtail:2.5.0"
-              "imagePullPolicy" = "IfNotPresent"
-              "name" = "promtail"
-              "ports" = [
-                {
-                  "containerPort" = 3101
-                  "name" = "http-metrics"
-                  "protocol" = "TCP"
-                },
-              ]
-              "readinessProbe" = {
-                "failureThreshold" = 5
-                "httpGet" = {
-                  "path" = "/ready"
-                  "port" = "http-metrics"
-                }
-                "initialDelaySeconds" = 10
-                "periodSeconds" = 10
-                "successThreshold" = 1
-                "timeoutSeconds" = 1
-              }
-              "securityContext" = {
-                "allowPrivilegeEscalation" = false
-                "capabilities" = {
-                  "drop" = [
-                    "ALL",
-                  ]
-                }
-                "readOnlyRootFilesystem" = true
-              }
-              "volumeMounts" = [
-                {
-                  "mountPath" = "/etc/promtail"
-                  "name" = "config"
-                },
-                {
-                  "mountPath" = "/run/promtail"
-                  "name" = "run"
-                },
-                {
-                  "mountPath" = "/var/lib/docker/containers"
-                  "name" = "containers"
-                  "readOnly" = true
-                },
-                {
-                  "mountPath" = "/var/log/pods"
-                  "name" = "pods"
-                  "readOnly" = true
-                },
-              ]
-            },
-          ]
-          "securityContext" = {
-            "runAsGroup" = 0
-            "runAsUser" = 0
-          }
-          "serviceAccountName" = "simple-promtail"
-          "tolerations" = [
-            {
-              "effect" = "NoSchedule"
-              "key" = "node-role.kubernetes.io/master"
-              "operator" = "Exists"
-            },
-            {
-              "effect" = "NoSchedule"
-              "key" = "node-role.kubernetes.io/control-plane"
-              "operator" = "Exists"
-            },
-          ]
-          "volumes" = [
-            {
-              "name" = "config"
-              "secret" = {
-                "secretName" = "simple-promtail"
-              }
-            },
-            {
-              "hostPath" = {
-                "path" = "/run/promtail"
-              }
-              "name" = "run"
-            },
-            {
-              "hostPath" = {
-                "path" = "/var/lib/docker/containers"
-              }
-              "name" = "containers"
-            },
-            {
-              "hostPath" = {
-                "path" = "/var/log/pods"
-              }
-              "name" = "pods"
-            },
-          ]
+        annotations = {
+          "checksum/config" = "44e07f0d41f62837de707e485e8658f49d1602a32cd828299e129989e9e4287c"
         }
       }
-      "updateStrategy" = {}
+      spec {
+        volume {
+          name = "config"
+          secret {
+            secret_name = "simple-promtail"
+          }
+        }
+        volume {
+          name = "run"
+          host_path {
+            path = "/run/promtail"
+          }
+        }
+        volume {
+          name = "containers"
+          host_path {
+            path = "/var/lib/docker/containers"
+          }
+        }
+        volume {
+          name = "pods"
+          host_path {
+            path = "/var/log/pods"
+          }
+        }
+        container {
+          name  = "promtail"
+          image = "docker.io/grafana/promtail:2.6.1"
+          args  = ["-config.file=/etc/promtail/promtail.yaml"]
+          port {
+            name           = "http-metrics"
+            container_port = 3101
+            protocol       = "TCP"
+          }
+          env {
+            name = "HOSTNAME"
+            value_from {
+              field_ref {
+                field_path = "spec.nodeName"
+              }
+            }
+          }
+          volume_mount {
+            name       = "config"
+            mount_path = "/etc/promtail"
+          }
+          volume_mount {
+            name       = "run"
+            mount_path = "/run/promtail"
+          }
+          volume_mount {
+            name       = "containers"
+            read_only  = true
+            mount_path = "/var/lib/docker/containers"
+          }
+          volume_mount {
+            name       = "pods"
+            read_only  = true
+            mount_path = "/var/log/pods"
+          }
+          readiness_probe {
+            http_get {
+              path = "/ready"
+              port = "http-metrics"
+            }
+            initial_delay_seconds = 10
+            timeout_seconds       = 1
+            period_seconds        = 10
+            success_threshold     = 1
+            failure_threshold     = 5
+          }
+          image_pull_policy = "IfNotPresent"
+          security_context {
+            capabilities {
+              drop = ["ALL"]
+            }
+            read_only_root_filesystem = true
+          }
+        }
+        service_account_name = "simple-promtail"
+        security_context {
+          run_as_user = 0
+        }
+        toleration {
+          key      = "node-role.kubernetes.io/master"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+        toleration {
+          key      = "node-role.kubernetes.io/control-plane"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+        enable_service_links = true
+      }
     }
   }
 }

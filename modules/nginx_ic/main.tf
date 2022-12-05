@@ -484,6 +484,13 @@ resource "kubernetes_ingress_class" "nginx" {
   }
 }
 resource "kubernetes_validating_webhook_configuration" "ingress_nginx_admission" {
+  lifecycle {
+    ignore_changes = [
+      # Ignore changes to tags, e.g. because a management agent
+      # updates these based on some ruleset managed elsewhere.
+      webhook[0]
+    ]
+  }
   depends_on = [kubernetes_manifest.namespace_ingress_nginx]
   metadata  {
     name = "ingress-nginx-admission"
