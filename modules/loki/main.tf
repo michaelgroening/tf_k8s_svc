@@ -277,6 +277,7 @@ resource "kubernetes_stateful_set" "simple_loki" {
       spec {
         volume {
           name      = "tmp"
+          empty_dir {}
         }
         volume {
           name = "config"
@@ -286,6 +287,7 @@ resource "kubernetes_stateful_set" "simple_loki" {
         }
         volume {
           name      = "storage"
+          empty_dir {}
         }
         container {
           name  = "loki"
