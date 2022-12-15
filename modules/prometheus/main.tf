@@ -1,21 +1,15 @@
-resource "kubernetes_manifest" "namespace_prometheus_metrics" {
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Namespace"
-    "metadata" = {
-      "name" = "prometheus-metrics"
-    }
+resource "kubernetes_namespace" "prometheus_metrics" {
+  metadata {
+    name = "prometheus-metrics"
   }
 }
-
-resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "v1"
-    "data" = {
-      "prometheus.yaml" = <<-EOT
+resource "kubernetes_config_map" "prometheus_config" {
+  metadata {
+    name      = "prometheus-config"
+    namespace = "prometheus-metrics"
+  }
+  data = {
+    "prometheus.yaml" = <<-EOT
       # Global config
       global:
         scrape_interval: 15s
@@ -198,8 +192,7 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
       #
       # * `prometheus.io/probe`: Only probe services that have a value of `true`
       - job_name: 'kubernetes-services'
-
-        metrics_path: /probe
+        metrics_path: /metrics
         params:
           module: [http_2xx]
 
@@ -212,25 +205,9 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
               - loki
 
         relabel_configs:
-        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
           action: keep
           regex: true
-        - source_labels: [__address__]
-          target_label: __param_target
-        - target_label: __address__
-          replacement: blackbox
-        - source_labels: [__param_target]
-          target_label: instance
-        - action: labelmap
-          regex: __meta_kubernetes_service_label_(.+)
-        - source_labels: [__meta_kubernetes_service_name]
-          target_label: job
-        metric_relabel_configs:
-        - source_labels:
-            - namespace
-          action: replace
-          regex: (.+)
-          target_label: kubernetes_namespace
 
       # Example scrape config for pods
       #
@@ -285,22 +262,14 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_config" 
         - "/etc/prometheus/rules/*.yaml"
         - "/etc/prometheus/rules/*.yml"
       EOT
-    }
-    "kind" = "ConfigMap"
-    "metadata" = {
-      "name" = "prometheus-config"
-      "namespace" = "prometheus-metrics"
-    }
   }
 }
-
-resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_rules" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "v1"
-    "data" = {
+resource "kubernetes_config_map" "prometheus_rules" {
+  metadata {
+    name      = "prometheus-rules"
+    namespace = "prometheus-metrics"
+  }
+  data = {
       "alertmanager.rules.yaml" = <<-EOT
       groups:
       - name: alertmanager.rules
@@ -825,18 +794,8 @@ resource "kubernetes_manifest" "configmap_prometheus_metrics_prometheus_rules" {
             summary: "Prometheus isn't ingesting samples"
       EOT
     }
-    "kind" = "ConfigMap"
-    "metadata" = {
-      "name" = "prometheus-rules"
-      "namespace" = "prometheus-metrics"
-    }
-  }
 }
-
 resource "kubernetes_manifest" "serviceaccount_prometheus_metrics_prometheus" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
   manifest = {
     "apiVersion" = "v1"
     "kind" = "ServiceAccount"
@@ -846,635 +805,453 @@ resource "kubernetes_manifest" "serviceaccount_prometheus_metrics_prometheus" {
     }
   }
 }
-
-resource "kubernetes_manifest" "service_prometheus_metrics_prometheus" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Service"
-    "metadata" = {
-      "annotations" = {
-        "prometheus.io/scrape" = "true"
-      }
-      "name" = "prometheus"
-      "namespace" = "prometheus-metrics"
-    }
-    "spec" = {
-      "ports" = [
-        {
-          "name" = "web"
-          "port" = 80
-          "protocol" = "TCP"
-          "targetPort" = 9090
-        },
-      ]
-      "selector" = {
-        "name" = "prometheus"
-      }
-      "type" = "ClusterIP"
+resource "kubernetes_service" "prometheus" {
+  metadata {
+    name      = "prometheus"
+    namespace = "prometheus-metrics"
+    annotations = {
+      "prometheus.io/scrape" = "true"
     }
   }
-}
-
-resource "kubernetes_manifest" "statefulset_prometheus_metrics_prometheus" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "apps/v1"
-    "kind" = "StatefulSet"
-    "metadata" = {
-      "name" = "prometheus"
-      "namespace" = "prometheus-metrics"
+  spec {
+    port {
+      name        = "web"
+      protocol    = "TCP"
+      port        = 80
+      target_port = "9090"
     }
-    "spec" = {
-      "podManagementPolicy" = "OrderedReady"
-      "replicas" = 1
-      "revisionHistoryLimit" = 10
-      "selector" = {
-        "matchLabels" = {
-          "name" = "prometheus"
+    selector = {
+      name = "prometheus"
+    }
+    type = "ClusterIP"
+  }
+}
+resource "kubernetes_stateful_set" "prometheus" {
+  metadata {
+    name      = "prometheus"
+    namespace = "prometheus-metrics"
+  }
+  spec {
+    replicas = 1
+    selector {
+      match_labels = {
+        name = "prometheus"
+      }
+    }
+    template {
+      metadata {
+        labels = {
+          name = "prometheus"
         }
       }
-      "serviceName" = "prometheus"
-      "template" = {
-        "metadata" = {
-          "creationTimestamp" = null
-          "labels" = {
-            "name" = "prometheus"
+      spec {
+        volume {
+          name = "config"
+          config_map {
+            name         = "prometheus-config"
+            default_mode = "0644"
           }
         }
-        "spec" = {
-          "affinity" = {
-            "nodeAffinity" = {
-              "requiredDuringSchedulingIgnoredDuringExecution" = {
-                "nodeSelectorTerms" = [
-                  {
-                    "matchExpressions" = [
-                      {
-                        "key" = "kubernetes.io/os"
-                        "operator" = "In"
-                        "values" = [
-                          "linux",
-                        ]
-                      },
-                    ]
-                  },
-                ]
+        volume {
+          name = "rules"
+          config_map {
+            name         = "prometheus-rules"
+            default_mode = "0644"
+          }
+        }
+        init_container {
+          name    = "chown"
+          image   = "docker.io/alpine:3.12"
+          command = ["chown", "-R", "65534:65534", "/var/lib/prometheus"]
+          volume_mount {
+            name       = "data"
+            mount_path = "/var/lib/prometheus"
+          }
+          termination_message_path   = "/dev/termination-log"
+          termination_message_policy = "File"
+          image_pull_policy          = "IfNotPresent"
+        }
+        container {
+          name  = "prometheus"
+          image = "quay.io/prometheus/prometheus:v2.27.1"
+          args  = [
+            "--web.listen-address=0.0.0.0:9090",
+            "--web.enable-lifecycle",
+            "--config.file=/etc/prometheus/prometheus.yaml", 
+            "--storage.tsdb.path=/var/lib/prometheus", 
+            "--storage.tsdb.retention.time=2d", 
+            "--storage.tsdb.retention.size=5GB", 
+            "--storage.tsdb.min-block-duration=2h", 
+            "--storage.tsdb.max-block-duration=2h"
+          ]
+          port {
+            name           = "web"
+            container_port = 9090
+            protocol       = "TCP"
+          }
+          resources {
+            requests = {
+              cpu = "100m"
+              memory = "512Mi"
+            }
+          }
+          volume_mount {
+            name       = "config"
+            mount_path = "/etc/prometheus"
+          }
+          volume_mount {
+            name       = "rules"
+            mount_path = "/etc/prometheus/rules"
+          }
+          volume_mount {
+            name       = "data"
+            mount_path = "/var/lib/prometheus"
+          }
+          liveness_probe {
+            http_get {
+              path   = "/-/healthy"
+              port   = "9090"
+              scheme = "HTTP"
+            }
+            initial_delay_seconds = 10
+            timeout_seconds       = 10
+            period_seconds        = 10
+            success_threshold     = 1
+            failure_threshold     = 3
+          }
+          readiness_probe {
+            http_get {
+              path   = "/-/ready"
+              port   = "9090"
+              scheme = "HTTP"
+            }
+            initial_delay_seconds = 10
+            timeout_seconds       = 10
+            period_seconds        = 10
+            success_threshold     = 1
+            failure_threshold     = 3
+          }
+          termination_message_path   = "/dev/termination-log"
+          termination_message_policy = "File"
+          image_pull_policy          = "IfNotPresent"
+        }
+        restart_policy                   = "Always"
+        termination_grace_period_seconds = 30
+        dns_policy                       = "ClusterFirst"
+        service_account_name             = "prometheus"
+        affinity {
+          node_affinity {
+            required_during_scheduling_ignored_during_execution {
+              node_selector_term {
+                match_expressions {
+                  key      = "kubernetes.io/os"
+                  operator = "In"
+                  values   = ["linux"]
+                }
               }
             }
           }
-          "containers" = [
-            {
-              "args" = [
-                "--web.listen-address=0.0.0.0:9090",
-                "--config.file=/etc/prometheus/prometheus.yaml",
-                "--storage.tsdb.path=/var/lib/prometheus",
-                "--storage.tsdb.retention.time=2d",
-                "--storage.tsdb.retention.size=5GB",
-                "--storage.tsdb.min-block-duration=2h",
-                "--storage.tsdb.max-block-duration=2h",
-              ]
-              "image" = "quay.io/prometheus/prometheus:v2.35.0"
-              "imagePullPolicy" = "IfNotPresent"
-              "livenessProbe" = {
-                "failureThreshold" = 3
-                "httpGet" = {
-                  "path" = "/-/healthy"
-                  "port" = 9090
-                  "scheme" = "HTTP"
-                }
-                "initialDelaySeconds" = 10
-                "periodSeconds" = 10
-                "successThreshold" = 1
-                "timeoutSeconds" = 10
-              }
-              "name" = "prometheus"
-              "ports" = [
-                {
-                  "containerPort" = 9090
-                  "name" = "web"
-                  "protocol" = "TCP"
-                },
-              ]
-              "readinessProbe" = {
-                "failureThreshold" = 3
-                "httpGet" = {
-                  "path" = "/-/ready"
-                  "port" = 9090
-                  "scheme" = "HTTP"
-                }
-                "initialDelaySeconds" = 10
-                "periodSeconds" = 10
-                "successThreshold" = 1
-                "timeoutSeconds" = 10
-              }
-              "resources" = {
-                "requests" = {
-                  "cpu" = "100m"
-                  "memory" = "512Mi"
-                }
-              }
-              "terminationMessagePath" = "/dev/termination-log"
-              "terminationMessagePolicy" = "File"
-              "volumeMounts" = [
-                {
-                  "mountPath" = "/etc/prometheus"
-                  "name" = "config"
-                },
-                {
-                  "mountPath" = "/etc/prometheus/rules"
-                  "name" = "rules"
-                },
-                {
-                  "mountPath" = "/var/lib/prometheus"
-                  "name" = "data"
-                },
-              ]
-            },
-          ]
-          "dnsPolicy" = "ClusterFirst"
-          "initContainers" = [
-            {
-              "command" = [
-                "chown",
-                "-R",
-                "65534:65534",
-                "/var/lib/prometheus",
-              ]
-              "image" = "docker.io/alpine:3.12"
-              "imagePullPolicy" = "IfNotPresent"
-              "name" = "chown"
-              "resources" = {}
-              "terminationMessagePath" = "/dev/termination-log"
-              "terminationMessagePolicy" = "File"
-              "volumeMounts" = [
-                {
-                  "mountPath" = "/var/lib/prometheus"
-                  "name" = "data"
-                },
-              ]
-            },
-          ]
-          "restartPolicy" = "Always"
-          "schedulerName" = "default-scheduler"
-          "securityContext" = {}
-          "serviceAccount" = "prometheus"
-          "serviceAccountName" = "prometheus"
-          "terminationGracePeriodSeconds" = 30
-          "volumes" = [
-            {
-              "configMap" = {
-                "defaultMode" = 420
-                "name" = "prometheus-config"
-              }
-              "name" = "config"
-            },
-            {
-              "configMap" = {
-                "defaultMode" = 420
-                "name" = "prometheus-rules"
-              }
-              "name" = "rules"
-            },
-          ]
         }
       }
-      "updateStrategy" = {
-        "rollingUpdate" = {
-          "partition" = 0
-        }
-        "type" = "RollingUpdate"
+    }
+    volume_claim_template {
+      metadata {
+        name = "data"
       }
-      "volumeClaimTemplates" = [
-        {
-          "apiVersion" = "v1"
-          "kind" = "PersistentVolumeClaim"
-          "metadata" = {
-            "creationTimestamp" = null
-            "name" = "data"
+      spec {
+        access_modes = ["ReadWriteOnce"]
+        resources {
+          requests = {
+            storage = "20G"
           }
-          "spec" = {
-            "accessModes" = [
-              "ReadWriteOnce",
-            ]
-            "resources" = {
-              "requests" = {
-                "storage" = "20G"
-              }
+        }
+      }
+    }
+    service_name          = "prometheus"
+    pod_management_policy = "OrderedReady"
+    update_strategy {
+      type = "RollingUpdate"
+    }
+    revision_history_limit = 10
+  }
+}
+resource "kubernetes_cluster_role" "prometheus_metrics" {
+  metadata {
+    name = "prometheus-metrics"
+  }
+  rule {
+    verbs      = ["get", "list", "watch"]
+    api_groups = [""]
+    resources  = ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods", "ingresses", "configmaps"]
+  }
+  rule {
+    verbs             = ["get"]
+    non_resource_urls = ["/metrics"]
+  }
+}
+resource "kubernetes_cluster_role_binding" "prometheus_metrics" {
+  metadata {
+    name = "prometheus-metrics"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = "prometheus"
+    namespace = "prometheus-metrics"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "prometheus-metrics"
+  }
+}
+
+resource "kubernetes_daemonset" "node_exporter" {
+  metadata {
+    name      = "node-exporter"
+    namespace = "prometheus-metrics"
+  }
+  spec {
+    selector {
+      match_labels = {
+        name = "node-exporter"
+        phase = "prod"
+      }
+    }
+    template {
+      metadata {
+        labels = {
+          name = "node-exporter"
+          phase = "prod"
+        }
+      }
+      spec {
+        volume {
+          name = "proc"
+          host_path {
+            path = "/proc"
+          }
+        }
+        volume {
+          name = "sys"
+          host_path {
+            path = "/sys"
+          }
+        }
+        volume {
+          name = "root"
+          host_path {
+            path = "/"
+          }
+        }
+        container {
+          name  = "node-exporter"
+          image = "quay.io/prometheus/node-exporter:v1.1.2"
+          args  = ["--path.procfs=/host/proc", "--path.sysfs=/host/sys", "--path.rootfs=/host/root", "--collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker|var/lib/containerd|var/lib/containers/.+)($|/)", "--collector.filesystem.ignored-fs-types=^(autofs|binfmt_misc|cgroup|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|sysfs|tracefs)$"]
+          port {
+            name           = "metrics"
+            container_port = 9100
+            protocol       = "TCP"
+          }
+          resources {
+            limits = {
+              cpu = "200m"
+              memory = "100Mi"
             }
-            "volumeMode" = "Filesystem"
+            requests = {
+              cpu = "10m"
+              memory = "24Mi"
+            }
           }
-          "status" = {
-            "phase" = "Pending"
+          volume_mount {
+            name       = "proc"
+            read_only  = true
+            mount_path = "/host/proc"
           }
-        },
-      ]
-    }
-  }
-}
-
-resource "kubernetes_manifest" "clusterrole_prometheus_metrics" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "ClusterRole"
-    "metadata" = {
-      "name" = "prometheus-metrics"
-    }
-    "rules" = [
-      {
-        "apiGroups" = [
-          "",
-        ]
-        "resources" = [
-          "nodes",
-          "nodes/proxy",
-          "nodes/metrics",
-          "services",
-          "endpoints",
-          "pods",
-          "ingresses",
-          "configmaps",
-        ]
-        "verbs" = [
-          "get",
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "nonResourceURLs" = [
-          "/metrics",
-        ]
-        "verbs" = [
-          "get",
-        ]
-      },
-    ]
-  }
-}
-
-resource "kubernetes_manifest" "clusterrolebinding_prometheus_metrics" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "ClusterRoleBinding"
-    "metadata" = {
-      "name" = "prometheus-metrics"
-    }
-    "roleRef" = {
-      "apiGroup" = "rbac.authorization.k8s.io"
-      "kind" = "ClusterRole"
-      "name" = "prometheus-metrics"
-    }
-    "subjects" = [
-      {
-        "kind" = "ServiceAccount"
-        "name" = "prometheus"
-        "namespace" = "prometheus-metrics"
-      },
-    ]
-  }
-}
-resource "kubernetes_manifest" "daemonset_prometheus_metrics_node_exporter" {
-  computed_fields = ["metadata"]
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "apps/v1"
-    "kind" = "DaemonSet"
-    "metadata" = {
-      "name" = "node-exporter"
-      "namespace" = "prometheus-metrics"
-    }
-    "spec" = {
-      "revisionHistoryLimit" = 10
-      "selector" = {
-        "matchLabels" = {
-          "name" = "node-exporter"
-          "phase" = "prod"
+          volume_mount {
+            name       = "sys"
+            read_only  = true
+            mount_path = "/host/sys"
+          }
+          volume_mount {
+            name       = "root"
+            read_only  = true
+            mount_path = "/host/root"
+          }
+          termination_message_path   = "/dev/termination-log"
+          termination_message_policy = "File"
+          image_pull_policy          = "IfNotPresent"
         }
-      }
-      "template" = {
-        "metadata" = {
-          "creationTimestamp" = null
-          "labels" = {
-            "name" = "node-exporter"
-            "phase" = "prod"
-          }
+        restart_policy                   = "Always"
+        termination_grace_period_seconds = 30
+        dns_policy                       = "ClusterFirst"
+        host_pid                         = true
+        security_context {
+          run_as_user     = 65534
+          run_as_non_root = true
         }
-        "spec" = {
-          "affinity" = {
-            "nodeAffinity" = {
-              "requiredDuringSchedulingIgnoredDuringExecution" = {
-                "nodeSelectorTerms" = [
-                  {
-                    "matchExpressions" = [
-                      {
-                        "key" = "kubernetes.io/os"
-                        "operator" = "In"
-                        "values" = [
-                          "linux",
-                        ]
-                      },
-                    ]
-                  },
-                ]
+        affinity {
+          node_affinity {
+            required_during_scheduling_ignored_during_execution {
+              node_selector_term {
+                match_expressions {
+                  key      = "kubernetes.io/os"
+                  operator = "In"
+                  values   = ["linux"]
+                }
               }
             }
           }
-          "containers" = [
-            {
-              "args" = [
-                "--path.procfs=/host/proc",
-                "--path.sysfs=/host/sys",
-                "--path.rootfs=/host/root",
-                "--collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker|var/lib/containerd|var/lib/containers/.+)($|/)",
-                "--collector.filesystem.ignored-fs-types=^(autofs|binfmt_misc|cgroup|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|mqueue|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|sysfs|tracefs)$",
-              ]
-              "image" = "quay.io/prometheus/node-exporter:v1.3.1"
-              "imagePullPolicy" = "IfNotPresent"
-              "name" = "node-exporter"
-              "ports" = [
-                {
-                  "containerPort" = 9100
-                  "name" = "metrics"
-                  "protocol" = "TCP"
-                },
-              ]
-              "resources" = {
-                "limits" = {
-                  "cpu" = "200m"
-                  "memory" = "100Mi"
-                }
-                "requests" = {
-                  "cpu" = "10m"
-                  "memory" = "24Mi"
-                }
-              }
-              "securityContext" = {
-                "seccompProfile" = {
-                  "type" = "RuntimeDefault"
-                }
-              }
-              "terminationMessagePath" = "/dev/termination-log"
-              "terminationMessagePolicy" = "File"
-              "volumeMounts" = [
-                {
-                  "mountPath" = "/host/proc"
-                  "name" = "proc"
-                  "readOnly" = true
-                },
-                {
-                  "mountPath" = "/host/sys"
-                  "name" = "sys"
-                  "readOnly" = true
-                },
-                {
-                  "mountPath" = "/host/root"
-                  "name" = "root"
-                  "readOnly" = true
-                },
-              ]
-            },
-          ]
-          "dnsPolicy" = "ClusterFirst"
-          "hostPID" = true
-          "restartPolicy" = "Always"
-          "schedulerName" = "default-scheduler"
-          "securityContext" = {
-            "runAsNonRoot" = true
-            "runAsUser" = 65534
-          }
-          "terminationGracePeriodSeconds" = 30
-          "tolerations" = [
-            {
-              "effect" = "NoSchedule"
-              "operator" = "Exists"
-            },
-          ]
-          "volumes" = [
-            {
-              "hostPath" = {
-                "path" = "/proc"
-                "type" = ""
-              }
-              "name" = "proc"
-            },
-            {
-              "hostPath" = {
-                "path" = "/sys"
-                "type" = ""
-              }
-              "name" = "sys"
-            },
-            {
-              "hostPath" = {
-                "path" = "/"
-                "type" = ""
-              }
-              "name" = "root"
-            },
-          ]
         }
-      }
-      "updateStrategy" = {
-        "rollingUpdate" = {
-          "maxSurge" = 0
-          "maxUnavailable" = 1
+        toleration {
+          operator = "Exists"
+          effect   = "NoSchedule"
         }
-        "type" = "RollingUpdate"
       }
     }
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "1"
+      }
+    }
+    revision_history_limit = 10
+  }
+}
+resource "kubernetes_service" "node_exporter" {
+  metadata {
+    name      = "node-exporter"
+    namespace = "prometheus-metrics"
+    annotations = {
+      "prometheus.io/scrape" = "true"
+    }
+  }
+  spec {
+    port {
+      name        = "metrics"
+      protocol    = "TCP"
+      port        = 80
+      target_port = "9100"
+    }
+    selector = {
+      name = "node-exporter"
+      phase = "prod"
+    }
+    type             = "ClusterIP"
+    session_affinity = "None"
   }
 }
 
-resource "kubernetes_manifest" "service_prometheus_metrics_node_exporter" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Service"
-    "metadata" = {
-      "annotations" = {
-        "prometheus.io/scrape" = "true"
-      }
-      "name" = "node-exporter"
-      "namespace" = "prometheus-metrics"
-    }
-    "spec" = {
-      "ports" = [
-        {
-          "name" = "metrics"
-          "port" = 80
-          "protocol" = "TCP"
-          "targetPort" = 9100
-        },
-      ]
-      "selector" = {
-        "name" = "node-exporter"
-        "phase" = "prod"
-      }
-      "sessionAffinity" = "None"
-      "type" = "ClusterIP"
-    }
+resource "kubernetes_deployment" "kube_state_metrics" {
+  metadata {
+    name      = "kube-state-metrics"
+    namespace = "prometheus-metrics"
   }
-}
-resource "kubernetes_manifest" "deployment_prometheus_metrics_kube_state_metrics" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "apps/v1"
-    "kind" = "Deployment"
-    "metadata" = {
-      "name" = "kube-state-metrics"
-      "namespace" = "prometheus-metrics"
+  spec {
+    replicas = 1
+    selector {
+      match_labels = {
+        name = "kube-state-metrics"
+      }
     }
-    "spec" = {
-      "progressDeadlineSeconds" = 600
-      "replicas" = 1
-      "revisionHistoryLimit" = 10
-      "selector" = {
-        "matchLabels" = {
-          "name" = "kube-state-metrics"
+    template {
+      metadata {
+        labels = {
+          name = "kube-state-metrics"
         }
       }
-      "strategy" = {
-        "rollingUpdate" = {
-          "maxSurge" = "25%"
-          "maxUnavailable" = "25%"
-        }
-        "type" = "RollingUpdate"
-      }
-      "template" = {
-        "metadata" = {
-          "creationTimestamp" = null
-          "labels" = {
-            "name" = "kube-state-metrics"
+      spec {
+        container {
+          name  = "kube-state-metrics"
+          image = "k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.7.0"
+          port {
+            name           = "metrics"
+            container_port = 8080
+            protocol       = "TCP"
           }
+          resources {
+            limits = {
+              cpu = "200m"
+              memory = "150Mi"
+            }
+            requests = {
+              cpu = "10m"
+              memory = "32Mi"
+            }
+          }
+          readiness_probe {
+            http_get {
+              path   = "/healthz"
+              port   = "8080"
+              scheme = "HTTP"
+            }
+            initial_delay_seconds = 5
+            timeout_seconds       = 5
+            period_seconds        = 10
+            success_threshold     = 1
+            failure_threshold     = 3
+          }
+          termination_message_path   = "/dev/termination-log"
+          termination_message_policy = "File"
+          image_pull_policy          = "IfNotPresent"
         }
-        "spec" = {
-          "affinity" = {
-            "nodeAffinity" = {
-              "requiredDuringSchedulingIgnoredDuringExecution" = {
-                "nodeSelectorTerms" = [
-                  {
-                    "matchExpressions" = [
-                      {
-                        "key" = "kubernetes.io/os"
-                        "operator" = "In"
-                        "values" = [
-                          "linux",
-                        ]
-                      },
-                    ]
-                  },
-                ]
+        restart_policy                   = "Always"
+        termination_grace_period_seconds = 30
+        dns_policy                       = "ClusterFirst"
+        service_account_name             = "kube-state-metrics"
+        affinity {
+          node_affinity {
+            required_during_scheduling_ignored_during_execution {
+              node_selector_term {
+                match_expressions {
+                  key      = "kubernetes.io/os"
+                  operator = "In"
+                  values   = ["linux"]
+                }
               }
             }
           }
-          "containers" = [
-            {
-              "image" = "k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.4.2"
-              "imagePullPolicy" = "IfNotPresent"
-              "name" = "kube-state-metrics"
-              "ports" = [
-                {
-                  "containerPort" = 8080
-                  "name" = "metrics"
-                  "protocol" = "TCP"
-                },
-              ]
-              "readinessProbe" = {
-                "failureThreshold" = 3
-                "httpGet" = {
-                  "path" = "/healthz"
-                  "port" = 8080
-                  "scheme" = "HTTP"
-                }
-                "initialDelaySeconds" = 5
-                "periodSeconds" = 10
-                "successThreshold" = 1
-                "timeoutSeconds" = 5
-              }
-              "resources" = {
-                "limits" = {
-                  "cpu" = "200m"
-                  "memory" = "150Mi"
-                }
-                "requests" = {
-                  "cpu" = "10m"
-                  "memory" = "32Mi"
-                }
-              }
-              "terminationMessagePath" = "/dev/termination-log"
-              "terminationMessagePolicy" = "File"
-            },
-          ]
-          "dnsPolicy" = "ClusterFirst"
-          "restartPolicy" = "Always"
-          "schedulerName" = "default-scheduler"
-          "securityContext" = {}
-          "serviceAccount" = "kube-state-metrics"
-          "serviceAccountName" = "kube-state-metrics"
-          "terminationGracePeriodSeconds" = 30
         }
       }
     }
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "25%"
+        max_surge       = "25%"
+      }
+    }
+    revision_history_limit    = 10
+    progress_deadline_seconds = 600
   }
 }
-
-resource "kubernetes_manifest" "service_prometheus_metrics_kube_state_metrics" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "v1"
-    "kind" = "Service"
-    "metadata" = {
-      "annotations" = {
-        "prometheus.io/scrape" = "true"
-      }
-      "labels" = {
-        "app.kubernetes.io/name" = "prometheus-metrics"
-        "name" = "kube-state-metrics"
-      }
-      "name" = "kube-state-metrics"
-      "namespace" = "prometheus-metrics"
+resource "kubernetes_service" "kube_state_metrics" {
+  metadata {
+    name      = "kube-state-metrics"
+    namespace = "prometheus-metrics"
+    labels = {
+      "app.kubernetes.io/name" = "prometheus-metrics"
+      name = "kube-state-metrics"
     }
-    "spec" = {
-      "ports" = [
-        {
-          "name" = "metrics"
-          "port" = 8080
-          "protocol" = "TCP"
-          "targetPort" = 8080
-        },
-      ]
-      "selector" = {
-        "name" = "kube-state-metrics"
-      }
-      "sessionAffinity" = "None"
-      "type" = "ClusterIP"
+    annotations = {
+      "prometheus.io/scrape" = "true"
     }
   }
+  spec {
+    port {
+      name        = "metrics"
+      protocol    = "TCP"
+      port        = 8080
+      target_port = "8080"
+    }
+    selector = {
+      name = "kube-state-metrics"
+    }
+    type             = "ClusterIP"
+    session_affinity = "None"
+  }
 }
-
 resource "kubernetes_manifest" "serviceaccount_prometheus_metrics_kube_state_metrics" {
   computed_fields = ["secrets"]
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
   manifest = {
     "apiVersion" = "v1"
     "kind" = "ServiceAccount"
@@ -1489,218 +1266,88 @@ resource "kubernetes_manifest" "serviceaccount_prometheus_metrics_kube_state_met
     ]
   }
 }
-
-resource "kubernetes_manifest" "clusterrole_kube_state_metrics" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "ClusterRole"
-    "metadata" = {
-      "name" = "kube-state-metrics"
-    }
-    "rules" = [
-      {
-        "apiGroups" = [
-          "",
-        ]
-        "resources" = [
-          "configmaps",
-          "secrets",
-          "nodes",
-          "pods",
-          "services",
-          "resourcequotas",
-          "replicationcontrollers",
-          "limitranges",
-          "persistentvolumeclaims",
-          "persistentvolumes",
-          "namespaces",
-          "endpoints",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "extensions",
-        ]
-        "resources" = [
-          "daemonsets",
-          "deployments",
-          "replicasets",
-          "ingresses",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "apps",
-        ]
-        "resources" = [
-          "statefulsets",
-          "daemonsets",
-          "deployments",
-          "replicasets",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "batch",
-        ]
-        "resources" = [
-          "cronjobs",
-          "jobs",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "autoscaling",
-        ]
-        "resources" = [
-          "horizontalpodautoscalers",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "authentication.k8s.io",
-        ]
-        "resources" = [
-          "tokenreviews",
-        ]
-        "verbs" = [
-          "create",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "authorization.k8s.io",
-        ]
-        "resources" = [
-          "subjectaccessreviews",
-        ]
-        "verbs" = [
-          "create",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "policy",
-        ]
-        "resources" = [
-          "poddisruptionbudgets",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "certificates.k8s.io",
-        ]
-        "resources" = [
-          "certificatesigningrequests",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "storage.k8s.io",
-        ]
-        "resources" = [
-          "storageclasses",
-          "volumeattachments",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "admissionregistration.k8s.io",
-        ]
-        "resources" = [
-          "mutatingwebhookconfigurations",
-          "validatingwebhookconfigurations",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "networking.k8s.io",
-        ]
-        "resources" = [
-          "networkpolicies",
-          "ingresses"
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-      {
-        "apiGroups" = [
-          "coordination.k8s.io",
-        ]
-        "resources" = [
-          "leases",
-        ]
-        "verbs" = [
-          "list",
-          "watch",
-        ]
-      },
-    ]
+resource "kubernetes_cluster_role" "kube_state_metrics" {
+  metadata {
+    name = "kube-state-metrics"
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = [""]
+    resources  = ["networking","configmaps", "secrets", "nodes", "pods", "services", "resourcequotas", "replicationcontrollers", "limitranges", "persistentvolumeclaims", "persistentvolumes", "namespaces", "endpoints"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["extensions"]
+    resources  = ["daemonsets", "deployments", "replicasets", "ingresses"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["apps"]
+    resources  = ["statefulsets", "daemonsets", "deployments", "replicasets"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["batch"]
+    resources  = ["cronjobs", "jobs"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["autoscaling"]
+    resources  = ["horizontalpodautoscalers"]
+  }
+  rule {
+    verbs      = ["create"]
+    api_groups = ["authentication.k8s.io"]
+    resources  = ["tokenreviews"]
+  }
+  rule {
+    verbs      = ["create"]
+    api_groups = ["authorization.k8s.io"]
+    resources  = ["subjectaccessreviews"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["policy"]
+    resources  = ["poddisruptionbudgets"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["certificates.k8s.io"]
+    resources  = ["certificatesigningrequests"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["storage.k8s.io"]
+    resources  = ["storageclasses", "volumeattachments"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["admissionregistration.k8s.io"]
+    resources  = ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["networking.k8s.io"]
+    resources  = ["networkpolicies","ingresses"]
+  }
+  rule {
+    verbs      = ["list", "watch"]
+    api_groups = ["coordination.k8s.io"]
+    resources  = ["leases"]
   }
 }
-
-resource "kubernetes_manifest" "clusterrolebinding_kube_state_metrics" {
-  depends_on = [
-    kubernetes_manifest.namespace_prometheus_metrics
-  ]
-  manifest = {
-    "apiVersion" = "rbac.authorization.k8s.io/v1"
-    "kind" = "ClusterRoleBinding"
-    "metadata" = {
-      "name" = "kube-state-metrics"
-    }
-    "roleRef" = {
-      "apiGroup" = "rbac.authorization.k8s.io"
-      "kind" = "ClusterRole"
-      "name" = "kube-state-metrics"
-    }
-    "subjects" = [
-      {
-        "kind" = "ServiceAccount"
-        "name" = "kube-state-metrics"
-        "namespace" = "prometheus-metrics"
-      },
-    ]
+resource "kubernetes_cluster_role_binding" "kube_state_metrics" {
+  metadata {
+    name = "kube-state-metrics"
+  }
+  subject {
+    kind      = "ServiceAccount"
+    name      = "kube-state-metrics"
+    namespace = "prometheus-metrics"
+  }
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = "kube-state-metrics"
   }
 }
